@@ -1,46 +1,33 @@
-import Navbar from "./components/Navbar";
-import EcoCard from "./components/Ecocard";
-import ecoData from "./data/ecodata";
+
+import {BrowserRouter,Routes,Route,Navigate} from "react-router-dom";
+import Header from "./components/Header.jsx";
+import Dashboard from "./pages/dashboard.jsx";
+import Logs from "./pages/Logs.jsx";
+import Login from "./pages/Login.jsx";
+import ProtectedRoutes from "./routes/ProtectedRoutes.jsx";
+import DashboardLayout from "./pages/DashboardLayout.jsx";
+import DashboardAnalytics from "./pages/DashboardAnalytics.jsx";
+import DashboardSummary from "./pages/DashboardSummary.jsx";
 
 function App() {
-
-  // reduce() → calculate total carbon impact
-  const totalCarbon = ecoData.reduce(
-    (sum, item) => sum + item.carbon,
-    0
-  );
-
-  // filter() → only eco-friendly activities
-  const ecoFriendly = ecoData.filter(
-    item => item.carbon < 0
-  );
-
   return (
-    <>
-      <Navbar />
-
-      <h2>Eco Activities</h2>
-
-      {/* map() → render UI */}
-      {ecoData.map(item => (
-        <EcoCard
-          key={item.id}
-          activity={item.activity}
-          carbon={item.carbon}
-        />
-      ))}
-
-      <h3>Total Carbon Impact: {totalCarbon}</h3>
-
-      <h2>Eco-Friendly Actions</h2>
-      {ecoFriendly.map(item => (
-        <EcoCard
-          key={item.id}
-          activity={item.activity}
-          carbon={item.carbon}
-        />
-      ))}
-    </>
+    <BrowserRouter>
+      <Header title="Ecotrack"/>
+      <Routes>
+        <Route path="/" element={<Navigate to="/Login"/>}/>
+        <Route path="/login" element={<Login/>}/>
+        <Route path="/" element={
+          <ProtectedRoutes>
+            <DashboardLayout/>
+          </ProtectedRoutes>
+        }>
+          <Route index element={<DashboardSummary/>}/>
+          <Route path="summary" element={<DashboardSummary/>}/>
+          <Route path="analytics" element={<DashboardAnalytics/>}/>
+          <Route path="logs" element={<ProtectedRoutes> <Logs/></ProtectedRoutes>}/>
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
 
