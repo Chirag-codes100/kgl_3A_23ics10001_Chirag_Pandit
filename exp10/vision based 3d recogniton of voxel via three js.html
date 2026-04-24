@@ -1,0 +1,991 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chirag</title>
+  <style>
+
+    :root {
+    --accent: #ff2b2b;        /* primary red */
+    --accent-soft: #ff6b6b;   /* soft red */
+    --accent-dim: #b71c1c;    /* dark red */ 
+    --border-black: #000000; /* thin black borders */
+}
+
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&family=Share+Tech+Mono&display=swap');
+
+body {
+    margin: 0;
+    background: radial-gradient(circle at center, #050c14 0%, #000 70%);
+    overflow: hidden;
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--accent-soft);
+
+}
+
+html, body {
+    border: 2px solid #000;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.8);
+}
+
+
+
+/* CAMERA */
+#input_video {
+    position: absolute;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    transform: scaleX(-1);
+    z-index: 1;
+    opacity: 0.75;
+}
+
+/* THREE CANVAS */
+#three_canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 5;
+}
+
+/* BIOMETRIC OVERLAY */
+#biometric_canvas {
+    position: absolute;
+    width: 100vw;
+    height: 100vh;
+    z-index: 10;
+    transform: scaleX(-1);
+    pointer-events: none;
+}
+
+/* =================== CYBER HUD =================== */
+#ui {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 100;
+    width: 270px;
+
+    padding: 18px;
+    background:
+        linear-gradient(180deg, rgba(0,255,255,0.10), rgba(0,0,0,0.85)),
+        repeating-linear-gradient(
+            to bottom,
+            rgba(0,255,255,0.05),
+            rgba(0,255,255,0.05) 1px,
+            transparent 1px,
+            transparent 3px
+        );
+border: 1px solid var(--border-black);
+border-left: 4px solid var(--accent);
+
+    box-shadow:
+        0 0 25px rgba(0,240,255,0.35),
+        inset 0 0 20px rgba(0,240,255,0.15);
+}
+
+/* HUD TITLE */
+#ui .title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+
+    margin-bottom: 12px;
+}
+
+/* HUD ROW */
+.hud-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    font-size: 13px;
+}
+
+/* LEFT LABEL */
+.hud-key {
+    opacity: 0.6;
+    color: var(--accent-soft);
+
+}
+
+/* RIGHT VALUE */
+.hud-val {
+    color: #ffffff;
+    text-shadow: 0 0 8px rgba(0,240,255,0.8);
+}
+
+/* MODE SPECIAL */
+#mode {
+    color: var(--accent);
+    text-shadow: 0 0 12px rgba(255, 50, 50, 0.9);
+}
+
+
+/* HINTS */
+.hint {
+    margin-top: 12px;
+    font-size: 9px;
+    line-height: 1.5;
+    color: #7deaff;
+    opacity: 0.7;
+}
+
+/* SLOT BADGE */
+#slotBadge {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+
+    padding: 12px 16px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 14px;
+    letter-spacing: 2px;
+
+    background: rgba(0,0,0,0.75);
+    border: 1px solid var(--border-black);
+
+    box-shadow: 0 0 15px rgba(255,0,255,0.6);
+
+    color: #ff66ff;
+    text-shadow: 0 0 10px rgba(255,100,255,0.9);
+}
+</style>
+
+</head>
+<body>
+    <div id="ui">
+    <div class="title">VOXEL ARCHITECT</div>
+
+    <div class="hud-row">
+        <span class="hud-key">MODE</span>
+        <span id="mode" class="hud-val">INITIALIZING</span>
+    </div>
+
+    <div class="hud-row">
+        <span class="hud-key">VOXELS</span>
+        <span id="count" class="hud-val">0</span>
+    </div>
+
+    <div class="hud-row">
+        <span class="hud-key">TEXT</span>
+        <span id="textState" class="hud-val">IDLE</span>
+    </div>
+
+    <div class="hint">
+        ✊✊  RESET<br>
+        🖐🖐  ROTATE<br>
+        L ✌  COLOR<br>
+        R ✌  DISCO
+    </div>
+</div>
+
+<div id="slotBadge">SLOT 1</div>
+
+
+    <video id="input_video" autoplay playsinline></video>
+    <canvas id="three_canvas"></canvas>
+    <canvas id="biometric_canvas"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+
+    <script>
+
+        function setMode(label) {
+    const map = {
+        "BIO_LINK: SCANNING": "IDLE",
+        "INTENT: BUILDING": "BUILD",
+        "INTENT: ERASER_ACTIVE": "ERASE",
+        "TEXT MODE: ACTIVE": "TEXT",
+        "TEXT: GRABBED": "TEXT MOVE",
+        "SYSTEM: HOLD TO RESET...": "RESET (HOLD)",
+        "SYSTEM: HARD_RESET COMPLETE": "RESET DONE",
+        "SYSTEM: GLOBAL_ROTATE ACTIVE": "ROTATE",
+        "BIO_LINK: GRABBED": "MOVE WORLD"
+    };
+
+    modeEl.innerText = map[label] || label;
+}
+
+        let currentSceneSlot = 1; // default slot
+
+        const videoElement = document.getElementById('input_video');
+        const bioCanvas = document.getElementById('biometric_canvas');
+        const bioCtx = bioCanvas.getContext('2d');
+        const modeEl = document.getElementById('mode');
+        const countEl = document.getElementById('count');
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three_canvas'), antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        const voxelGroup = new THREE.Group();
+        scene.add(voxelGroup);
+        const currentSketch = new THREE.Group();
+        voxelGroup.add(currentSketch);
+
+        // ================= TEXT SYSTEM (STEP 1) =================
+const textGroup = new THREE.Group();
+scene.add(textGroup);
+
+let textObjects = [];
+let grabbedText = null;
+let isTextInteraction = false;
+
+
+
+        const gridSize = 1.2; 
+        const placedVoxels = new Map();
+        
+        const crosshair = new THREE.Mesh(
+            new THREE.BoxGeometry(gridSize, gridSize, gridSize),
+            new THREE.MeshBasicMaterial({
+    color: 0xff2b2b,   // RED instead of cyan
+    wireframe: true,
+    transparent: true,
+    opacity: 0.5
+})
+
+        );
+        scene.add(crosshair);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+        sun.position.set(5, 5, 5);
+        scene.add(sun);
+        camera.position.z = 20;
+
+        let smoothedLandmarks = { Left: [], Right: [] };
+        let gravityEnabled = false;
+        let rainbowActive = false; 
+        let gravityTimer = 0;
+        let restoreTimer = 0;
+        const GRAVITY_HOLD = 800;
+
+        // --- GLOBAL COLOR PALETTE ---
+        const colorPalette = [
+            0x00f0ff, 0xff0000, 0x0000ff, 0x00ff00, 0xffff00, 0xff00ff, 
+            0xffa500, 0x800080, 0x00ff7f, 0xff1493, 0x7fff00, 0x40e0d0, 
+            0xffd700, 0xff4500, 0x9370db, 0x00ced1, 0xf08080, 0xadff2f, 
+            0xff6347, 0x00bfff, 0xda70d6
+        ];
+        let globalColorIndex = 0;
+        let leftPeaceWasActive = false;
+
+        function getFloorY() {
+            const vFOV = THREE.MathUtils.degToRad(camera.fov); 
+            const height = 2 * Math.tan(vFOV / 2) * camera.position.z;
+            return -(height / 2) + (gridSize / 2);
+        }
+
+        function drawHUDCircle(ctx, x, y, progress, color) {
+            ctx.beginPath();
+            ctx.arc(x, y, 35, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * progress));
+            ctx.lineWidth = 5; ctx.strokeStyle = color; ctx.stroke();
+            ctx.setLineDash([3, 5]);
+            ctx.beginPath(); ctx.arc(x, y, 30, 0, Math.PI * 2); ctx.lineWidth = 1; ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+       function drawCyberHand(ctx, landmarks, label) {
+    if (!smoothedLandmarks[label] || smoothedLandmarks[label].length === 0) {
+        smoothedLandmarks[label] = landmarks.map(p => ({ ...p }));
+    } else {
+        landmarks.forEach((p, i) => {
+            smoothedLandmarks[label][i].x += (p.x - smoothedLandmarks[label][i].x) * 0.45;
+            smoothedLandmarks[label][i].y += (p.y - smoothedLandmarks[label][i].y) * 0.45;
+            smoothedLandmarks[label][i].z += (p.z - smoothedLandmarks[label][i].z) * 0.1;
+        });
+    }
+
+    const pts = smoothedLandmarks[label];
+    
+    /* ===== RED HAND THEME ===== */
+    ctx.shadowBlur = 4;                 // thinner glow
+    ctx.shadowColor = "#ff2b2b";        // red glow
+
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(255, 43, 43, 0.75)"; // red skeleton
+    ctx.lineWidth = 1.5;                // thinner lines (black-border feel)
+
+    const CONNECTIONS = [
+        [0,1],[1,2],[2,3],[3,4],
+        [0,5],[5,6],[6,7],[7,8],
+        [9,10],[10,11],[11,12],
+        [13,14],[14,15],[15,16],
+        [0,17],[17,18],[18,19],[19,20],
+        [5,9],[9,13],[13,17],[0,5]
+    ];
+
+    CONNECTIONS.forEach(([a, b]) => {
+        ctx.moveTo(pts[a].x * bioCanvas.width, pts[a].y * bioCanvas.height);
+        ctx.lineTo(pts[b].x * bioCanvas.width, pts[b].y * bioCanvas.height);
+    });
+    ctx.stroke();
+
+    /* ===== LANDMARK POINTS ===== */
+    pts.forEach((pt, i) => {
+        const x = pt.x * bioCanvas.width;
+        const y = pt.y * bioCanvas.height;
+
+        if ([4, 8, 12, 16, 20].includes(i)) {
+            // fingertip squares (RED with black outline look)
+            ctx.strokeStyle = "#000000";       // black border
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x - 7, y - 7, 14, 14);
+
+            ctx.strokeStyle = "#ff2b2b";       // red inside
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(x - 6, y - 6, 12, 12);
+        } else {
+            // joints (small red dots)
+            ctx.fillStyle = "#ff2b2b";
+            ctx.fillRect(x - 2, y - 2, 4, 4);
+        }
+    });
+}
+
+
+        let isGrabbing = false, grabTimer = 0;
+        let grabOffset = new THREE.Vector3();
+        let isBuilding = false, buildTimer = 0;
+        let isErasing = false, eraseTimer = 0;
+        let resetTimer = 0, rotateTimer = 0; 
+        let startPinchPos = null, activeAxis = null;
+        let sketchKeys = new Set();
+        
+        const GRAB_HOLD = 500;      
+        const INTENT_HOLD = 500;    
+        const RESET_HOLD = 1000;    
+        const ROTATE_HOLD = 1000;   
+        const pinchThreshold = 0.05; 
+
+        function getDist(p1, p2) { return Math.sqrt(Math.pow(p1.x-p2.x,2)+Math.pow(p1.y-p2.y,2)+(p1.z&&p2.z?Math.pow(p1.z-p2.z,2):0)); }
+
+        function onResults(results) {
+            bioCtx.clearRect(0, 0, bioCanvas.width, bioCanvas.height);
+            crosshair.visible = false;
+            
+            if (!results.multiHandLandmarks) {
+                grabTimer = 0; buildTimer = 0; eraseTimer = 0;
+                resetTimer = 0; rotateTimer = 0; gravityTimer = 0; restoreTimer = 0;
+                return;
+            }
+
+            let lHand = null, rHand = null;
+            results.multiHandedness.forEach((hand, idx) => {
+                const landmarks = results.multiHandLandmarks[idx];
+                drawCyberHand(bioCtx, landmarks, hand.label);
+                if(hand.label === 'Left') lHand = smoothedLandmarks['Left'];
+                if(hand.label === 'Right') rHand = smoothedLandmarks['Right'];
+            });
+
+            if (lHand && rHand) {
+                const lFist = lHand[8].y > lHand[6].y && lHand[12].y > lHand[10].y && lHand[16].y > lHand[14].y;
+                const rFist = rHand[8].y > rHand[6].y && rHand[12].y > rHand[10].y && rHand[16].y > rHand[14].y;
+                const lPalm = lHand[8].y < lHand[6].y && lHand[12].y < lHand[10].y && lHand[20].y < lHand[18].y;
+                const rPalm = rHand[8].y < rHand[6].y && rHand[12].y < rHand[10].y && rHand[20].y < rHand[18].y;
+
+                if (lFist && rFist) {
+                    if (resetTimer < RESET_HOLD) {
+                        resetTimer += 16;
+                        drawHUDCircle(bioCtx, bioCanvas.width / 2, bioCanvas.height / 2, resetTimer/RESET_HOLD, "#ff0055");
+                        modeEl.innerText = "SYSTEM: HOLD TO RESET...";
+                    } else if (resetTimer >= RESET_HOLD && resetTimer < 2000) {
+                        voxelGroup.position.set(0, 0, 0);
+                        voxelGroup.rotation.set(0, 0, 0);
+                        modeEl.innerText = "SYSTEM: HARD_RESET COMPLETE";
+                        resetTimer = 2000;
+                    }
+                    return; 
+                } else { resetTimer = 0; }
+
+                if (lPalm && rPalm) {
+                    if (rotateTimer < ROTATE_HOLD) {
+                        rotateTimer += 16;
+                        drawHUDCircle(bioCtx, bioCanvas.width / 2, bioCanvas.height / 2, rotateTimer/ROTATE_HOLD, "#00f0ff");
+                        modeEl.innerText = "SYSTEM: HOLD TO ENABLE ROTATION...";
+                    } else {
+                        modeEl.innerText = "SYSTEM: GLOBAL_ROTATE ACTIVE";
+                        voxelGroup.rotation.y += (rHand[9].x - lHand[9].x - 0.5) * 0.05;
+                        voxelGroup.rotation.x += (rHand[9].y - lHand[9].y) * 0.05;
+                    }
+                    return; 
+                } else { rotateTimer = 0; }
+            }
+
+            if (lHand) {
+                const fingersCurled = lHand[8].y > lHand[6].y && lHand[12].y > lHand[10].y && lHand[16].y > lHand[14].y && lHand[20].y > lHand[18].y;
+                const isFist = fingersCurled && getDist(lHand[4], lHand[12]) < 0.1;
+                const isPalm = lHand[8].y < lHand[6].y && lHand[12].y < lHand[10].y && lHand[20].y < lHand[18].y;
+                const isThumbDown = lHand[4].y > lHand[3].y && lHand[4].y > lHand[17].y && fingersCurled;
+                const isThumbUp = lHand[4].y < lHand[3].y && lHand[4].y < lHand[5].y && fingersCurled;
+
+                // LEFT HAND PEACE SIGN (TOGGLE COLOR)
+                const isLeftPeace = lHand[8].y < lHand[6].y && lHand[12].y < lHand[10].y && lHand[16].y > lHand[14].y && lHand[20].y > lHand[18].y;
+                if (isLeftPeace && !leftPeaceWasActive) {
+                    globalColorIndex = (globalColorIndex + 1) % colorPalette.length;
+                    leftPeaceWasActive = true;
+                } else if (!isLeftPeace) {
+                    leftPeaceWasActive = false;
+                }
+
+                if (isPalm) {
+                    isGrabbing = false;
+                    grabTimer = 0;
+                    modeEl.innerText = "BIO_LINK: SCANNING";
+                }
+
+                if (isThumbDown && !isFist) {
+                    restoreTimer = 0;
+                    if (!gravityEnabled) {
+                        if (gravityTimer < GRAVITY_HOLD) {
+                            gravityTimer += 16;
+                            drawHUDCircle(bioCtx, lHand[4].x * bioCanvas.width, lHand[4].y * bioCanvas.height, gravityTimer/GRAVITY_HOLD, "#ff00ff");
+                            modeEl.innerText = "BIO_LINK: INITIATING BURST...";
+                        } else {
+                            gravityEnabled = true;
+                            initiateGravityFall();
+                            modeEl.innerText = "BIO_LINK: GRAVITY_ACTIVE";
+                            gravityTimer = 0;
+                        }
+                    }
+                } else if (isThumbUp && !isFist) {
+                    gravityTimer = 0;
+                    if (gravityEnabled) {
+                        if (restoreTimer < GRAVITY_HOLD) {
+                            restoreTimer += 16;
+                            drawHUDCircle(bioCtx, lHand[4].x * bioCanvas.width, lHand[4].y * bioCanvas.height, restoreTimer/GRAVITY_HOLD, "#00ff88");
+                            modeEl.innerText = "BIO_LINK: RESTORING COORDS...";
+                        } else {
+                            gravityEnabled = false;
+                            modeEl.innerText = "BIO_LINK: STRUCTURE_RESTORED";
+                            restoreTimer = 0;
+                        }
+                    }
+                } else {
+                    gravityTimer = 0; restoreTimer = 0;
+                }
+
+                if (isFist && !isThumbDown && !isThumbUp) {
+                    if (grabTimer < GRAB_HOLD) {
+                        grabTimer += 16;
+                        drawHUDCircle(bioCtx, lHand[0].x * bioCanvas.width, lHand[0].y * bioCanvas.height, grabTimer/GRAB_HOLD, "#ffbb00");
+                    } else {
+                        const handWorldPos = new THREE.Vector3((0.5 - lHand[9].x) * 25, (0.5 - lHand[9].y) * 18, 0);
+                        
+                        if (!isGrabbing) { grabOffset.copy(voxelGroup.position).sub(handWorldPos); isGrabbing = true; }
+                        voxelGroup.position.copy(handWorldPos).add(grabOffset);
+                        modeEl.innerText = "BIO_LINK: GRABBED";
+                    }
+                } else if (isGrabbing) {
+                    const handWorldPos = new THREE.Vector3((0.5 - lHand[9].x) * 25, (0.5 - lHand[9].y) * 18, 0);
+                    voxelGroup.position.copy(handWorldPos).add(grabOffset);
+                }
+            }
+
+            if (rHand) {
+
+
+                const thumbTip = rHand[4], indexTip = rHand[8], midTip = rHand[12];
+                const pinchingNow = getDist(thumbTip, indexTip) < pinchThreshold;
+                const pointingNow = indexTip.y < rHand[6].y && midTip.y > rHand[10].y;
+                const palmOpen = rHand[8].y < rHand[6].y && rHand[12].y < rHand[10].y && rHand[20].y < rHand[18].y;
+                
+                const isPeace = indexTip.y < rHand[6].y && midTip.y < rHand[10].y && rHand[16].y > rHand[14].y && rHand[20].y > rHand[18].y;
+                if (isPeace) rainbowActive = true;
+                else if (palmOpen) rainbowActive = false;
+
+                const px = indexTip.x * bioCanvas.width, py = indexTip.y * bioCanvas.height;
+                const worldPos = new THREE.Vector3((0.5 - indexTip.x) * 25, (0.5 - indexTip.y) * 18, 0);
+                // ================= TEXT PICK & MOVE =================
+textObjects.forEach(obj => {
+    const d = obj.position.distanceTo(worldPos);
+
+    if (pinchingNow && d < 1 && !grabbedText) {
+        grabbedText = obj;
+        isTextInteraction = true;
+        modeEl.innerText = "TEXT: GRABBED";
+    }
+});
+
+if (grabbedText && pinchingNow) {
+    grabbedText.position.lerp(worldPos, 0.35);
+}
+
+if (grabbedText && palmOpen) {
+    grabbedText = null;
+    isTextInteraction = false;
+    modeEl.innerText = "TEXT: RELEASED";
+}
+
+
+                if (isTextInteraction) {
+    // allow only palm release while text is grabbed
+    return;
+}
+                const localPos = voxelGroup.worldToLocal(worldPos.clone());
+                
+                let gx = Math.round(localPos.x / gridSize) * gridSize;
+                let gy = Math.round(localPos.y / gridSize) * gridSize;
+                let gz = 0; 
+
+                const lPinching = lHand && getDist(lHand[4], lHand[8]) < pinchThreshold;
+
+                if (lPinching && pointingNow && !palmOpen) {
+                    buildTimer = 0;
+                    if (eraseTimer < INTENT_HOLD) {
+                        eraseTimer += 16;
+                        drawHUDCircle(bioCtx, px, py, eraseTimer/INTENT_HOLD, "#ff3333");
+                        modeEl.innerText = "INTENT: ERASER_LOCKING...";
+                    } else {
+                        isErasing = true;
+                        const key = `${gx.toFixed(1)},${gy.toFixed(1)},${gz.toFixed(1)}`;
+                        if (placedVoxels.has(key)) {
+                            voxelGroup.remove(placedVoxels.get(key));
+                            placedVoxels.delete(key);
+                            countEl.innerText = placedVoxels.size;
+                        }
+                        modeEl.innerText = "INTENT: ERASER_ACTIVE";
+                    }
+                } else if (pinchingNow && !isGrabbing && !palmOpen  && !isTextInteraction) {
+                    eraseTimer = 0;
+                    if (buildTimer < INTENT_HOLD) {
+                        buildTimer += 16;
+                        drawHUDCircle(bioCtx, px, py, buildTimer/INTENT_HOLD, "#00ffcc");
+                        modeEl.innerText = "INTENT: BUILD_SYNCING...";
+                    } else {
+                        if (!isBuilding) { startPinchPos = { x: gx, y: gy, z: gz }; sketchKeys.clear(); isBuilding = true; activeAxis = null; }
+                        else {
+                            const dx = Math.abs(gx - startPinchPos.x), dy = Math.abs(gy - startPinchPos.y);
+                            if (!activeAxis && (dx > 0.4 || dy > 0.4)) {
+                                if (dx >= dy) activeAxis = 'x';
+                                else activeAxis = 'y';
+                            }
+                            let tx = startPinchPos.x, ty = startPinchPos.y;
+                            if (activeAxis === 'x') tx = gx; else if (activeAxis === 'y') ty = gy;
+                            addSketchVoxel(tx, ty, gz);
+                        }
+                       setMode("INTENT: BUILDING");
+
+                    }
+                } else {
+                    if (palmOpen) { if (isBuilding) commitVoxels(); isBuilding = false; isErasing = false; buildTimer = 0; eraseTimer = 0; modeEl.innerText = "BIO_LINK: NAVIGATING"; }
+                }
+
+                if (isBuilding || buildTimer > 0 || isErasing || eraseTimer > 0) {
+                    crosshair.visible = true;
+                    crosshair.position.copy(voxelGroup.localToWorld(new THREE.Vector3(gx, gy, gz)));
+                    crosshair.material.color.set((isErasing || eraseTimer > 0) ? 0xff3333 : colorPalette[globalColorIndex]);
+                }
+            }
+        }
+
+        function initiateGravityFall() {
+            placedVoxels.forEach((v) => {
+                v.velocity.set((Math.random() - 0.5) * 0.8, 0.4 + Math.random() * 0.5, (Math.random() - 0.5) * 0.8);
+                v.isBouncing = false;
+            });
+        }
+
+        function addSketchVoxel(x, y, z) {
+            const key = `${x.toFixed(1)},${y.toFixed(1)},${z.toFixed(1)}`;
+            if (sketchKeys.has(key) || placedVoxels.has(key)) return;
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(gridSize*0.98, gridSize*0.98, gridSize*0.98), new THREE.MeshBasicMaterial({ color: colorPalette[globalColorIndex], wireframe: true }));
+            mesh.position.set(x, y, z);
+            currentSketch.add(mesh);
+            sketchKeys.add(key);
+        }
+
+        function commitVoxels() {
+            while(currentSketch.children.length > 0) {
+                const f = currentSketch.children[0];
+                const key = `${f.position.x.toFixed(1)},${f.position.y.toFixed(1)},${f.position.z.toFixed(1)}`;
+                const cube = createFinalCube(f.position.x, f.position.y, f.position.z);
+                voxelGroup.add(cube);
+                placedVoxels.set(key, cube);
+                currentSketch.remove(f);
+            }
+            countEl.innerText = placedVoxels.size;
+        }
+
+        function createFinalCube(x, y, z) {
+            const g = new THREE.BoxGeometry(gridSize*0.95, gridSize*0.95, gridSize*0.95);
+            const m = new THREE.MeshPhongMaterial({ color: 0x001122, emissive: colorPalette[globalColorIndex], emissiveIntensity: 0.4, transparent: true, opacity: 0.8 });
+            const mesh = new THREE.Mesh(g, m);
+            mesh.position.set(x, y, z);
+            mesh.origin = new THREE.Vector3(x, y, z);
+            mesh.velocity = new THREE.Vector3(0,0,0);
+            mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), new THREE.LineBasicMaterial({ color: colorPalette[globalColorIndex] })));
+            return mesh;
+        }
+
+        function createTextMesh(word) {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+   ctx.font = "48px Share Tech Mono";
+    const metrics = ctx.measureText(word);
+
+    canvas.width = metrics.width + 20;
+    canvas.height = 64;
+
+    ctx.font = "48px Share Tech Mono";
+    ctx.fillStyle = "#ff2b2b";
+
+    ctx.fillText(word, 10, 50);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true
+    });
+
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(canvas.width / 60, canvas.height / 60, 1);
+
+    sprite.userData.word = word;
+    return sprite;
+}
+
+function spawnText(sentence) {
+    const words = sentence.split(" ");
+    let offsetX = -words.length * 0.6;
+
+    words.forEach(word => {
+        const mesh = createTextMesh(word);
+        mesh.position.set(offsetX, 0, 0.1);
+        textGroup.add(mesh);
+        textObjects.push(mesh);
+        offsetX += word.length * 0.6;
+    });
+
+    modeEl.innerText = "TEXT MODE: ACTIVE";
+}
+
+
+        const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.8, minTrackingConfidence: 0.8 });
+        hands.onResults(onResults);
+        new Camera(videoElement, { onFrame: async () => { bioCanvas.width = videoElement.videoWidth; bioCanvas.height = videoElement.videoHeight; await hands.send({image: videoElement}); }, width: 1280, height: 720 }).start();
+
+        function animate() { 
+            requestAnimationFrame(animate); 
+
+            if (rainbowActive) {
+                placedVoxels.forEach(v => {
+                    v.material.emissive.setHSL(Math.random(), 1, 0.5); 
+                    v.material.emissiveIntensity = 2.5; 
+                });
+            } else {
+                placedVoxels.forEach(v => {
+                    v.material.emissive.setHex(colorPalette[globalColorIndex]);
+                    v.material.emissiveIntensity = 0.4; 
+                    v.children[0].material.color.setHex(colorPalette[globalColorIndex]); // Edge lines
+                });
+            }
+
+            placedVoxels.forEach((v) => {
+                if (gravityEnabled) {
+                    const worldPos = new THREE.Vector3();
+                    v.getWorldPosition(worldPos);
+                    const floorY = getFloorY();
+                    if (worldPos.y > floorY || v.velocity.y > 0) {
+                        v.velocity.y -= 0.025; // Normal Responsive Gravity
+                        v.position.add(v.velocity);
+                    } else if (!v.isBouncing) {
+                        const localFloor = voxelGroup.worldToLocal(new THREE.Vector3(0, floorY, 0));
+                        v.position.y = localFloor.y;
+                        v.velocity.y *= -0.15;
+                        v.velocity.x *= 0.5;
+                        v.isBouncing = true;
+                    } else { v.velocity.set(0,0,0); }
+                } else {
+                    v.position.lerp(v.origin, 0.1);
+                    v.isBouncing = false;
+                }
+            });
+            renderer.render(scene, camera); 
+        }
+
+        window.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        const t = prompt("Enter text:");
+        if (t && t.trim().length > 0) {
+            spawnText(t.trim());
+        }
+    }
+});
+
+
+// ================= MULTI-SCENE HOTKEYS =================
+window.addEventListener("keydown", (e) => {
+    // SAVE SLOTS (CTRL + 1/2/3)
+    if (e.ctrlKey && ["1","2","3"].includes(e.key)) {
+        e.preventDefault();
+        currentSceneSlot = Number(e.key);
+        saveScene(currentSceneSlot);
+    }
+
+    // LOAD SLOTS (ALT + 1/2/3)
+    if (e.altKey && ["1","2","3"].includes(e.key)) {
+        e.preventDefault();
+        currentSceneSlot = Number(e.key);
+        loadScene(currentSceneSlot);
+    }
+});
+
+
+
+
+
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechRecognition) {
+    const recognizer = new SpeechRecognition();
+    recognizer.continuous = true;
+    recognizer.lang = "en-US";
+
+    recognizer.onresult = (e) => {
+        const text = e.results[e.results.length - 1][0].transcript.toLowerCase();
+        if (text.startsWith("text")) {
+            const content = text.replace("text", "").trim();
+            if (content.length > 0) {
+                spawnText(content);
+            }
+        }
+    };
+
+    recognizer.start();
+}// ================= MOUSE TEXT MOVE =================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredText = null;
+let draggedWord = null;
+let dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+let dragOffset = new THREE.Vector3();
+
+window.addEventListener("mousedown", (e) => {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(textObjects);
+
+    if (hits.length > 0) {
+        draggedWord = hits[0].object;
+        dragOffset.copy(draggedWord.position).sub(hits[0].point);
+        modeEl.innerText = "TEXT: MOUSE GRAB";
+    }
+});
+
+window.addEventListener("mousemove", (e) => {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    // --- hover detection ---
+    const hoverHits = raycaster.intersectObjects(textObjects);
+    hoveredText = hoverHits.length > 0 ? hoverHits[0].object : null;
+
+    // --- drag move ---
+    if (!draggedWord) return;
+
+    const point = new THREE.Vector3();
+    raycaster.ray.intersectPlane(dragPlane, point);
+    draggedWord.position.copy(point.add(dragOffset));
+});
+
+window.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(textObjects);
+
+    if (hits.length > 0) {
+        const word = hits[0].object;
+        textGroup.remove(word);
+        textObjects = textObjects.filter(o => o !== word);
+        modeEl.innerText = "TEXT: ERASED";
+    }
+});
+
+window.addEventListener("keydown", (e) => {
+    if (e.key === "Delete" && hoveredText) {
+        textGroup.remove(hoveredText);
+        textObjects = textObjects.filter(o => o !== hoveredText);
+        hoveredText = null;
+        modeEl.innerText = "TEXT: ERASED";
+    }
+});
+
+// ================= CLEAR ALL SCENE SLOTS =================
+function clearAllSlots() {
+    for (let i = 1; i <= 3; i++) {
+        localStorage.removeItem(`voxel_architect_scene_slot_${i}`);
+    }
+
+    // Clear voxels
+    placedVoxels.forEach(v => voxelGroup.remove(v));
+    placedVoxels.clear();
+
+    // Clear text
+    textObjects.forEach(t => textGroup.remove(t));
+    textObjects = [];
+
+    countEl.innerText = "0";
+    modeEl.innerText = "SYSTEM: ALL SLOTS CLEARED";
+}
+
+// ========== CLEAR CURRENT SLOT ONLY ==========
+function clearCurrentSlot() {
+    // remove saved data for current slot
+    localStorage.removeItem(`voxel_architect_scene_slot_${currentSceneSlot}`);
+
+    // clear voxels from scene
+    placedVoxels.forEach(v => voxelGroup.remove(v));
+    placedVoxels.clear();
+
+    // clear text from scene
+    textObjects.forEach(t => textGroup.remove(t));
+    textObjects = [];
+
+    // reset UI
+    countEl.innerText = "0";
+    modeEl.innerText = `SLOT ${currentSceneSlot}: CLEARED`;
+}
+
+// HOTKEY → CTRL + SHIFT + X
+window.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "x") {
+        e.preventDefault();
+        clearCurrentSlot();
+    }
+});
+
+
+window.addEventListener("mouseup", () => {
+    if (draggedWord) {
+        draggedWord = null;
+        modeEl.innerText = "TEXT: RELEASED";
+    }
+});
+function saveScene(slot = currentSceneSlot) {
+    const textData = textObjects.map(obj => ({
+        word: obj.userData.word,
+        x: obj.position.x,
+        y: obj.position.y,
+        z: obj.position.z
+    }));
+
+    const voxelData = [];
+    placedVoxels.forEach((v) => {
+        voxelData.push({
+            x: v.origin.x,
+            y: v.origin.y,
+            z: v.origin.z,
+            color: v.material.emissive.getHex()
+        });
+    });
+
+    const sceneData = {
+        text: textData,
+        voxels: voxelData
+    };
+
+    localStorage.setItem(
+        `voxel_architect_scene_slot_${slot}`,
+        JSON.stringify(sceneData)
+    );
+
+    modeEl.innerText = `SCENE: SAVED → SLOT ${slot}`;
+}
+
+
+function loadScene(slot = currentSceneSlot) {
+    const raw = localStorage.getItem(`voxel_architect_scene_slot_${slot}`);
+    if (!raw) {
+        modeEl.innerText = `SCENE: SLOT ${slot} EMPTY`;
+        return;
+    }
+
+    const sceneData = JSON.parse(raw);
+
+    // clear text
+    textObjects.forEach(obj => textGroup.remove(obj));
+    textObjects = [];
+
+    // clear voxels
+    placedVoxels.forEach(v => voxelGroup.remove(v));
+    placedVoxels.clear();
+
+    // restore text
+    sceneData.text.forEach(t => {
+        const mesh = createTextMesh(t.word);
+        mesh.position.set(t.x, t.y, t.z);
+        textGroup.add(mesh);
+        textObjects.push(mesh);
+    });
+
+    // restore voxels
+    sceneData.voxels.forEach(v => {
+        const cube = createFinalCube(v.x, v.y, v.z);
+
+        cube.material.emissive.setHex(v.color);
+        cube.children[0].material.color.setHex(v.color);
+
+        cube.origin = new THREE.Vector3(v.x, v.y, v.z);
+        cube.velocity = new THREE.Vector3(0, 0, 0);
+        cube.isBouncing = false;
+
+        const key = `${v.x.toFixed(1)},${v.y.toFixed(1)},${v.z.toFixed(1)}`;
+        voxelGroup.add(cube);
+        placedVoxels.set(key, cube);
+    });
+
+    gravityEnabled = false;
+    countEl.innerText = placedVoxels.size;
+    currentSceneSlot = slot;
+
+    modeEl.innerText = `SCENE: LOADED ← SLOT ${slot}`;
+}
+
+
+setInterval(() => {
+    if (textObjects.length > 0 || placedVoxels.size > 0) {
+        saveScene(currentSceneSlot);
+    }
+}, 5000);
+
+const textStateEl = document.getElementById("textState");
+const slotBadge = document.getElementById("slotBadge");
+
+setInterval(() => {
+    if (textStateEl) {
+        textStateEl.innerText = textObjects.length > 0 ? "ACTIVE" : "IDLE";
+    }
+    if (slotBadge) {
+        slotBadge.innerText = `SLOT ${currentSceneSlot}`;
+    }
+}, 300);
+
+
+
+
+        animate();
+    </script>
+</body>
+</html>
